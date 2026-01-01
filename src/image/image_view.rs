@@ -1,38 +1,19 @@
 use {
-    super::{
-        SourceImage,
-        double_line::DoubleLine,
-        zune_compat::DynamicImage,
-    },
+    super::{SourceImage, double_line::DoubleLine, zune_compat::DynamicImage},
     crate::{
         app::*,
-        display::{
-            Screen,
-            W,
-        },
+        display::{Screen, W},
         errors::ProgramError,
-        kitty::{
-            self,
-            KittyImageId,
-        },
+        kitty::{self, KittyImageId},
+        sixel,
         skin::PanelSkin,
     },
     crokey::crossterm::{
-        QueueableCommand,
-        cursor,
-        style::{
-            Color,
-            SetBackgroundColor,
-        },
+        QueueableCommand, cursor,
+        style::{Color, SetBackgroundColor},
     },
-    std::path::{
-        Path,
-        PathBuf,
-    },
-    termimad::{
-        Area,
-        fill_bg,
-    },
+    std::path::{Path, PathBuf},
+    termimad::{Area, fill_bg},
 };
 
 #[derive(Debug)]
@@ -87,8 +68,7 @@ impl ImageView {
         area: &Area,
     ) -> Result<(), ProgramError> {
         let styles = &disc.panel_skin.styles;
-        let bg_color = styles.preview.get_bg()
-            .or_else(|| styles.default.get_bg());
+        let bg_color = styles.preview.get_bg().or_else(|| styles.default.get_bg());
         let bg = bg_color.unwrap_or(Color::Reset);
 
         // we avoid drawing when we were just displayed
@@ -158,6 +138,25 @@ impl ImageView {
         let (width, height) = img.dimensions();
         debug!("resized image dimensions: {},{}", width, height);
         debug_assert!(width <= area.width as u32);
+
+        // sixel
+        // FIXME: the cached `img` is resized against double line image size,
+        // not sixel size, which need a cell size multiplier.
+        let sixel_result = sixel::image_renderer::try_print_image(
+            w,
+            img,
+            width as usize,
+            height as usize,
+            area.left,
+            area.top,
+            bg,
+        );
+        if sixel_result.is_ok() {
+            return Ok(());
+        }
+        debug!("render sixel failed {:?}", sixel_result);
+
+        // double line
         let mut double_line = DoubleLine::new(width as usize, disc.con.true_colors);
         let mut y = area.top;
         let img_top_offset = (area.height - (height / 2) as u16) / 2;

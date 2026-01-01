@@ -1,8 +1,6 @@
 /// Compatibility layer supporting both zune-image (fast) and image crate (fallback)
 use {
-    crate::errors::ProgramError,
-    image::GenericImageView,
-    std::path::Path,
+    crate::errors::ProgramError, image::GenericImageView, std::path::Path,
     zune_core::colorspace::ColorSpace,
 };
 
@@ -42,9 +40,8 @@ impl DynamicImage {
             return Err(ProgramError::ImageError {
                 details: format!(
                     "Unsupported color space with {} components in image: {:?}",
-                    nb_components,
-                    path
-                )
+                    nb_components, path
+                ),
             });
         }
         Ok(Self::Zune(img))
@@ -65,7 +62,11 @@ impl DynamicImage {
         }
     }
 
-    pub fn from_rgba8(width: u32, height: u32, data: Vec<u8>) -> Result<Self, ProgramError> {
+    pub fn from_rgba8(
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
+    ) -> Result<Self, ProgramError> {
         let expected_len = (width as usize) * (height as usize) * 4;
         if data.len() != expected_len {
             return Err(ProgramError::Internal {
@@ -73,11 +74,16 @@ impl DynamicImage {
                     "Invalid RGBA data length: expected {}, got {}",
                     expected_len,
                     data.len()
-                )
+                ),
             });
         }
 
-        let img = zune_image::image::Image::from_u8(&data, width as usize, height as usize, ColorSpace::RGBA);
+        let img = zune_image::image::Image::from_u8(
+            &data,
+            width as usize,
+            height as usize,
+            ColorSpace::RGBA,
+        );
         Ok(Self::Zune(img))
     }
 
@@ -91,7 +97,11 @@ impl DynamicImage {
         }
     }
 
-    pub fn resize(&self, max_width: u32, max_height: u32) -> Result<Self, ProgramError> {
+    pub fn resize(
+        &self,
+        max_width: u32,
+        max_height: u32,
+    ) -> Result<Self, ProgramError> {
         match self {
             Self::Zune(img) => {
                 let (width, height) = self.dimensions();
@@ -101,7 +111,8 @@ impl DynamicImage {
                 }
 
                 // Calculate new dimensions maintaining aspect ratio
-                let ratio = (max_width as f32 / width as f32).min(max_height as f32 / height as f32);
+                let ratio =
+                    (max_width as f32 / width as f32).min(max_height as f32 / height as f32);
                 let new_width = (width as f32 * ratio) as usize;
                 let new_height = (height as f32 * ratio) as usize;
 
@@ -119,7 +130,9 @@ impl DynamicImage {
                         colorspace.num_components(),
                     );
 
-                    let img = zune_image::image::Image::from_u8(&dst_data, new_width, new_height, colorspace);
+                    let img = zune_image::image::Image::from_u8(
+                        &dst_data, new_width, new_height, colorspace,
+                    );
                     Ok(Self::Zune(img))
                 } else {
                     Ok(self.clone())
@@ -130,7 +143,8 @@ impl DynamicImage {
                 if width <= max_width && height <= max_height {
                     Ok(self.clone())
                 } else {
-                    let new_img = img.resize(max_width, max_height, image::imageops::FilterType::Triangle);
+                    let new_img =
+                        img.resize(max_width, max_height, image::imageops::FilterType::Triangle);
                     Ok(Self::Image(new_img))
                 }
             }
@@ -185,6 +199,22 @@ impl DynamicImage {
         }
     }
 
+    pub fn to_rgba8(&self) -> RgbaImage {
+        match self {
+            DynamicImage::Zune(image) => {
+                let mut img = image.clone();
+
+                if img.colorspace() != ColorSpace::RGBA {
+                    // TODO: should report error
+                    _ = img.convert_color(ColorSpace::RGBA);
+                }
+
+                RgbaImage::Zune(img)
+            }
+            DynamicImage::Image(dynamic_image) => RgbaImage::Image(dynamic_image.to_rgba8()),
+        }
+    }
+
     pub fn pixels(&self) -> PixelIterator {
         match self {
             Self::Zune(img) => {
@@ -209,10 +239,7 @@ impl DynamicImage {
             }
             Self::Image(img) => {
                 let pixels: Vec<_> = img.pixels().collect();
-                PixelIterator::Image {
-                    pixels,
-                    index: 0,
-                }
+                PixelIterator::Image { pixels, index: 0 }
             }
         }
     }
@@ -318,13 +345,22 @@ impl RgbaImage {
         }
     }
 
-    pub fn from_vec(width: u32, height: u32, data: Vec<u8>) -> Option<Self> {
+    pub fn from_vec(
+        width: u32,
+        height: u32,
+        data: Vec<u8>,
+    ) -> Option<Self> {
         let expected_len = (width as usize) * (height as usize) * 4;
         if data.len() != expected_len {
             return None;
         }
 
-        let img = zune_image::image::Image::from_u8(&data, width as usize, height as usize, ColorSpace::RGBA);
+        let img = zune_image::image::Image::from_u8(
+            &data,
+            width as usize,
+            height as usize,
+            ColorSpace::RGBA,
+        );
         Some(Self::Zune(img))
     }
 }
@@ -334,7 +370,10 @@ pub struct Rgba<T>(pub [T; 4]);
 
 impl<T> std::ops::Index<usize> for Rgba<T> {
     type Output = T;
-    fn index(&self, index: usize) -> &Self::Output {
+    fn index(
+        &self,
+        index: usize,
+    ) -> &Self::Output {
         &self.0[index]
     }
 }

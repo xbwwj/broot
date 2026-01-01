@@ -26,6 +26,7 @@ pub mod permissions;
 pub mod preview;
 pub mod print;
 pub mod shell_install;
+pub mod sixel;
 pub mod skin;
 pub mod stage;
 pub mod syntactic;
