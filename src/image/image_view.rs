@@ -11,6 +11,7 @@ use {
     crokey::crossterm::{
         QueueableCommand, cursor,
         style::{Color, SetBackgroundColor},
+        terminal::window_size,
     },
     std::path::{Path, PathBuf},
     termimad::{Area, fill_bg},
@@ -113,6 +114,50 @@ impl ImageView {
             return Ok(());
         }
 
+        // sixel
+        // FIXME: the ioctl size is not reliable, should use escape sequence instead, e.g. 14t for
+        // window size, 16t for cell size
+        let window_size = window_size()?;
+        let target_width = (area.width * window_size.width / window_size.columns) as u32;
+        let target_height = (area.height * window_size.height / window_size.rows) as u32;
+        let cached = self
+            .display_img
+            .as_ref()
+            .filter(|ci| ci.target_width == target_width && ci.target_height == target_height);
+        let img = match cached {
+            Some(ci) => &ci.img,
+            None => {
+                let img = time!(
+                    "resize image",
+                    self.source_img
+                        .fitting(target_width, target_height, bg_color),
+                )?;
+                self.display_img = Some(CachedImage {
+                    img,
+                    target_width,
+                    target_height,
+                });
+                &self.display_img.as_ref().unwrap().img
+            }
+        };
+        let (width, height) = img.dimensions();
+        debug!("resized image dimensions: {},{}", width, height);
+
+        let sixel_result = sixel::image_renderer::try_print_image(
+            w,
+            img,
+            width as usize,
+            height as usize,
+            area.left,
+            area.top,
+            bg,
+        );
+        if sixel_result.is_ok() {
+            return Ok(());
+        }
+        debug!("render sixel failed {:?}", sixel_result);
+
+        // double line
         let target_width = area.width as u32;
         let target_height = (area.height * 2) as u32;
         let cached = self
@@ -139,24 +184,6 @@ impl ImageView {
         debug!("resized image dimensions: {},{}", width, height);
         debug_assert!(width <= area.width as u32);
 
-        // sixel
-        // FIXME: the cached `img` is resized against double line image size,
-        // not sixel size, which need a cell size multiplier.
-        let sixel_result = sixel::image_renderer::try_print_image(
-            w,
-            img,
-            width as usize,
-            height as usize,
-            area.left,
-            area.top,
-            bg,
-        );
-        if sixel_result.is_ok() {
-            return Ok(());
-        }
-        debug!("render sixel failed {:?}", sixel_result);
-
-        // double line
         let mut double_line = DoubleLine::new(width as usize, disc.con.true_colors);
         let mut y = area.top;
         let img_top_offset = (area.height - (height / 2) as u16) / 2;
